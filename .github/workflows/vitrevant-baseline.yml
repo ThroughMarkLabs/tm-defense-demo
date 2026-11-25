@@ -1,0 +1,23 @@
+# Copy to a repo as .github/workflows/vitrevant-baseline.yml — records the immutable baseline entry when a
+# PR merges (mirrors the GCP gate's bind_baseline). Self-hosted, outbound-only.
+name: vitrevant-baseline
+on:
+  pull_request:
+    types: [closed]
+jobs:
+  baseline:
+    if: github.event.pull_request.merged == true
+    runs-on: [self-hosted, vitrevant]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - run: bash "$VLI_HOME/runner/run_baseline.sh"
+        env:
+          VLI_HOME: ${{ vars.VLI_HOME || '/home/ubuntu/ec2' }}   # the 14_standalone checkout on the box; run_*.sh derives VLI_SINK_DIR=$VLI_HOME/data/sink
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
