@@ -56,6 +56,30 @@ jobs:
             "/projects/$REPO_NAME" --project "$REPO_NAME"
         env:
           VLI_HOME: ${{ vars.VLI_HOME }}
+      # Keep the publisher's /repo mount (= $VLI_HOME/projects/<name>, the
+      # real git clone created at onboard time) up to date with the branch
+      # that was just pushed. Without this, merged PRs never reach the
+      # publisher's working tree, so audit_index.json's traces[] dict stays
+      # empty of post-onboard work and the viewer Graph + Matrix tabs show
+      # no edges from new requirements to new PRs. The reindex rsync above
+      # feeds the RAG index at data/projects/ — a distinct clone the
+      # publisher doesn't read. Trigger a publisher rebuild afterwards.
+      - name: sync publisher clone (projects/) so Graph + Matrix see merged code
+        run: |
+          : "${VLI_HOME:?VLI_HOME required}"
+          REPO_NAME=$(basename "${{ github.repository }}")
+          PUB_DIR="$VLI_HOME/projects/$REPO_NAME"
+          if [ -d "$PUB_DIR/.git" ]; then
+            git config --global --add safe.directory "$PUB_DIR" || true
+            git -C "$PUB_DIR" fetch origin "${{ github.ref_name }}" --quiet
+            git -C "$PUB_DIR" reset --hard "origin/${{ github.ref_name }}"
+            echo "publisher clone now at $(git -C "$PUB_DIR" rev-parse --short HEAD)"
+            touch "$VLI_HOME/data/sink/.publish-trigger" 2>/dev/null || true
+          else
+            echo "WARN: $PUB_DIR/.git missing — repo not onboarded, skipping sync"
+          fi
+        env:
+          VLI_HOME: ${{ vars.VLI_HOME }}
 
   record-close:
     runs-on: [self-hosted, vitrevant]
